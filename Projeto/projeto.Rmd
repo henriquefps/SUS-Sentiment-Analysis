@@ -1,38 +1,48 @@
 ---
-title: "Projeto"
+title: "Análise de Sentimentos SUS"
 author: "Henrique Silva"
 date: "10/10/2020"
 output: html_document
 ---
-
-```{r setup, include=FALSE} 
+##Libraries
+```{r setup} 
 library(tm)
 library(wordcloud)
 library(syuzhet)
 library(stringr)
 library(stringi)
 library(readr)
-setwd("~/RFiles/Projeto")
+library(dplyr)
 ```
 
 ```{r, include=FALSE}
+setwd("~/GitHub/SUS-Sentiment-Analysis/Projeto")
+```
 
+
+##Constantes
+
+```{r}
 sent_labels <- c("Raiva", "Antecipação", "Nojo", "Medo", "Alegria", 
-                   "Tristeza", "Surpesa", "Confiança", "Negativo", "Positivo", "Neutral")
+"Tristeza", "Surpesa", "Confiança", "Negativo", "Positivo", "Neutral")
 
 months <- c("Dez 2019", "Jan 2020", "Fev 2020", "Mar 2020", "Abril 2020", 
-                   "Maio 2020")
+"Maio 2020")
+```
+
+## Functions
+```{r}
 textclean1 <- function(text_list){
   aux <- text_list
   removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
   aux <-  readr::parse_character(aux, locale = readr::locale('pt'))
-  aux <- sapply(aux, function(x) stri_trans_tolower(x,'pt'))
-  aux <- gsub("<[Uu]\\+[a-zA-Z0-9]*>", "",  aux);
+  aux <- sapply(aux, function(x) stri_trans_tolower(x,'pt')) # Por tudo em letras minúsculas
+  aux <- gsub("<[Uu]\\+[a-zA-Z0-9]*>", "",  aux); # Remover Emojis
   aux <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "",  aux);
   aux <- str_replace(aux,"RT @[a-z,A-Z]*: ","")
   aux <- gsub("@\\w+", "", aux)
   aux <- removeURL(aux)
-  aux <- str_replace_all(aux,"@[a-zA-Z]*","")  
+  aux <- str_replace_all(aux,"@[a-zA-Z]*","") # Remover marcações @username
   aux <- gsub("[^[:alnum:][:blank:]!?]", "", aux)
   aux <- gsub("[[:digit:]]", "", aux)
   return(aux)
@@ -58,7 +68,7 @@ get_sentiment <- function(text_listf, title="Sentimentos"){
   s$negative <- (s$positive == 0 & s$neutral == 0)>0
   colnames(s) <- sent_labels
   barplot(colSums(s),las=2,col=rainbow(10), ylab= "Quantidade", 
-          main=title)
+main=title)
   return(s)
 }
 
@@ -68,12 +78,14 @@ get_freq <- function(text_listf, rwords=NULL, cloud_max_words = 100){
   dtm <- as.matrix(dtm)
   fre <- sort(rowSums(dtm),decreasing=TRUE)
   wordcloud(names(fre),freq=fre,min.freq=1,max.words=cloud_max_words,scale=c(4,.5),
-            random.order=F, rot.per=0.35, colors=brewer.pal(8, "Dark2"))
+ random.order=F, rot.per=0.35, colors=brewer.pal(8, "Dark2"))
   return(fre)
 }
 ```
 
-```{r, cache=TRUE, warning=FALSE, message=FALSE }
+##Carregar dados e limpar dados
+
+```{r}
 tweets <- read.csv("tweetsdb.csv", encoding = "UTF-8")
 
 tweets <- tweets[tweets$retweet == "False",]
@@ -81,6 +93,35 @@ tweets <- tweets[tweets$retweet == "False",]
 tweets$date <- str_extract(tweets$date, "[0-9]{4}-[0-9]{2}")
 
 tweets$textf <- textclean1(tweets$tweet)
+```
+
+###Remover Tweets em espanhol
+Criei uma heusrística para encontrar tweets em espanhol que vieram classificados como português pelo Twitter.
+Palavras 
+
+```{r}
+aux <- str_extract(string = tweets$tweet, pattern = "[A-Za-z]*n ")
+aux <- aux[!is.na(aux)]
+aux <- gsub(x = unique(aux), pattern =  " ", replacement =  "")
+
+length(tweets[tweets$tweet %like%"     "]$id)
+
+c("con","Protejan","Bon","compren","Tan","enviaron","lan","eran","n","en","mueren","sejan","hajapacien","veillon","implanon","quieren","rebelan","repiten","contaron","Brunin","son","Con","presuman","yan","Ninguen","un","escribieron","Saben","Hamon","Pokemon","pasan","dangerdirection","dicen","an","van","vmin","finn","jn","roacutan","vitin","Aerolin","borraron","Motivacion","seran","deforman","tan","Luan","revelan","MongeHan","Einstein","Van","in","legraton","jeongin","bolsomion","shaman","bailan","Tofen","ainsten","AlbertEinstein","Klan","sobren","Bjorn","jonathan","fin","discuten","Jean","Admin","Ainn","Un","suban","Buscopan","hudson","nenein","canarin","Rainan","Muhsin","American","garsan","Ain","hayinnnnnnnnn","reclaman","buscopan","inviten","estaban","liberteen","naman","dan","fofin","Leon","iguin","Butantan","minion","Jelipin","Quiten","Huan","mimarisin","pedrowestphalen","AnneGonn","heineken","Westphalen","duran","detran","preparen","rakin","Wilson","neguin","den","Association","graban","valgan","gustan","Sen","merlin","haechan","pusieron","Ken","infringen","siguen","gadominion","mmn","sobran","TeichNelson","Lockdown","Nelson","Watson","Justin","nelson","tahan","Amazon","hechan","Ewan","Jordan","Allan","lockdown","Johnson","sacaron","can","Morgan","richarlisson","verifiquen","Verifiquen","Bjin","dersen","empezaron","Brown","Eran","Cedan","Suban","Edilson","manden","faltan","Ubiratan","sorrisin","Wanderson","Fran","assumption","maaaaan","zen","einstein","Mandan","tiren","En","difundan","respetan","muestren","Patterson","Jarun","salgan","Estaban","LockDown","aminin","chingdizon","compartan","Pongan","borren","acabaron","Iguin","cierren","significan","TlalpanConscien","falten","encantan","olvidaron","tomasfeuermann","Hoffman","salen","usan","Lan")
+
+s <- gsub(x=s, pattern = "\\[[0-9]*\\]", replacement = "")
+s <- gsub(x=s, pattern = "\\\"", replacement = ",")
+s <- gsub(x=s, pattern = " ", replacement = ",")
+s <- gsub(x=s, pattern = ",,", replacement = ",")
+s <- gsub(x=s, pattern = ",,", replacement = ",")
+s <- gsub(x=s, pattern = ",,", replacement = ",")
+s <- gsub(x=s, pattern = ",,", replacement = ",")
+s <- gsub(x=s, pattern = ",", replacement = ',')
+
+head((tweets %>% select(id, date, tweet, textf)), n = 10)
+```
+
+
+```{r, cache=TRUE, warning=FALSE, message=FALSE }
 
 tp1 <- tweets[tweets$date == "2019-12",]
 tp2 <- tweets[tweets$date == "2020-01",]
