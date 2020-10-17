@@ -5,7 +5,7 @@ date: "10/10/2020"
 output: html_document
 ---
 ##Libraries
-```{r setup} 
+```{r setup, warning=FALSE, message=FALSE } 
 library(tm)
 library(wordcloud)
 library(syuzhet)
@@ -20,7 +20,7 @@ setwd("~/GitHub/SUS-Sentiment-Analysis/Projeto")
 ```
 
 
-##Constantes
+## Constantes
 
 ```{r}
 sent_labels <- c("Raiva", "Antecipação", "Nojo", "Medo", "Alegria", 
@@ -38,7 +38,7 @@ textclean1 <- function(text_list){
   aux <-  readr::parse_character(aux, locale = readr::locale('pt'))
   aux <- sapply(aux, function(x) stri_trans_tolower(x,'pt')) # Por tudo em letras minúsculas
   aux <- gsub("<[Uu]\\+[a-zA-Z0-9]*>", "",  aux); # Remover Emojis
-  aux <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "",  aux);
+  aux <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "",  aux)
   aux <- str_replace(aux,"RT @[a-z,A-Z]*: ","")
   aux <- gsub("@\\w+", "", aux)
   aux <- removeURL(aux)
@@ -63,12 +63,11 @@ build_corpus <- function(text_listf, rwords=NULL){
 
 get_sentiment <- function(text_listf, title="Sentimentos"){
   s <- get_nrc_sentiment(text_listf, language = "portuguese")
-  s$neutral <- (s$positive == s$negative)>0
-  s$positive <- (s$positive > s$negative)>0
-  s$negative <- (s$positive == 0 & s$neutral == 0)>0
-  colnames(s) <- sent_labels
-  barplot(colSums(s),las=2,col=rainbow(10), ylab= "Quantidade", 
-main=title)
+  s$neutral <- (s$positive == s$negative) > 0
+  s$positive <- (s$positive > s$negative) > 0
+  s$negative <- (s$positive == 0 & s$neutral == 0) > 0
+  colnames(s) <- sent_labels 
+  barplot(colSums(s),las=2,col=rainbow(10), ylab= "Quantidade", main=title)
   return(s)
 }
 
@@ -78,91 +77,59 @@ get_freq <- function(text_listf, rwords=NULL, cloud_max_words = 100){
   dtm <- as.matrix(dtm)
   fre <- sort(rowSums(dtm),decreasing=TRUE)
   wordcloud(names(fre),freq=fre,min.freq=1,max.words=cloud_max_words,scale=c(4,.5),
- random.order=F, rot.per=0.35, colors=brewer.pal(8, "Dark2"))
+  random.order=F, rot.per=0.35, colors=brewer.pal(8, "Dark2"))
   return(fre)
 }
 ```
 
-##Carregar dados e limpar dados
+## Carregar dados e limpar dados
 
 ```{r}
-tweets <- read.csv("tweetsdb.csv", encoding = "UTF-8")
-
-tweets <- tweets[tweets$retweet == "False",]
+tweets <- read.csv("new_tweetsdb.csv", encoding = "UTF-8")
 
 tweets$date <- str_extract(tweets$date, "[0-9]{4}-[0-9]{2}")
 
 tweets$textf <- textclean1(tweets$tweet)
 ```
 
-###Remover Tweets em espanhol
-Criei uma heusrística para encontrar tweets em espanhol que vieram classificados como português pelo Twitter.
-Palavras 
-
-```{r}
-aux <- str_extract(string = tweets$tweet, pattern = "[A-Za-z]*n ")
-aux <- aux[!is.na(aux)]
-aux <- gsub(x = unique(aux), pattern =  " ", replacement =  "")
-
-length(tweets[tweets$tweet %like%"     "]$id)
-
-c("con","Protejan","Bon","compren","Tan","enviaron","lan","eran","n","en","mueren","sejan","hajapacien","veillon","implanon","quieren","rebelan","repiten","contaron","Brunin","son","Con","presuman","yan","Ninguen","un","escribieron","Saben","Hamon","Pokemon","pasan","dangerdirection","dicen","an","van","vmin","finn","jn","roacutan","vitin","Aerolin","borraron","Motivacion","seran","deforman","tan","Luan","revelan","MongeHan","Einstein","Van","in","legraton","jeongin","bolsomion","shaman","bailan","Tofen","ainsten","AlbertEinstein","Klan","sobren","Bjorn","jonathan","fin","discuten","Jean","Admin","Ainn","Un","suban","Buscopan","hudson","nenein","canarin","Rainan","Muhsin","American","garsan","Ain","hayinnnnnnnnn","reclaman","buscopan","inviten","estaban","liberteen","naman","dan","fofin","Leon","iguin","Butantan","minion","Jelipin","Quiten","Huan","mimarisin","pedrowestphalen","AnneGonn","heineken","Westphalen","duran","detran","preparen","rakin","Wilson","neguin","den","Association","graban","valgan","gustan","Sen","merlin","haechan","pusieron","Ken","infringen","siguen","gadominion","mmn","sobran","TeichNelson","Lockdown","Nelson","Watson","Justin","nelson","tahan","Amazon","hechan","Ewan","Jordan","Allan","lockdown","Johnson","sacaron","can","Morgan","richarlisson","verifiquen","Verifiquen","Bjin","dersen","empezaron","Brown","Eran","Cedan","Suban","Edilson","manden","faltan","Ubiratan","sorrisin","Wanderson","Fran","assumption","maaaaan","zen","einstein","Mandan","tiren","En","difundan","respetan","muestren","Patterson","Jarun","salgan","Estaban","LockDown","aminin","chingdizon","compartan","Pongan","borren","acabaron","Iguin","cierren","significan","TlalpanConscien","falten","encantan","olvidaron","tomasfeuermann","Hoffman","salen","usan","Lan")
-
-s <- gsub(x=s, pattern = "\\[[0-9]*\\]", replacement = "")
-s <- gsub(x=s, pattern = "\\\"", replacement = ",")
-s <- gsub(x=s, pattern = " ", replacement = ",")
-s <- gsub(x=s, pattern = ",,", replacement = ",")
-s <- gsub(x=s, pattern = ",,", replacement = ",")
-s <- gsub(x=s, pattern = ",,", replacement = ",")
-s <- gsub(x=s, pattern = ",,", replacement = ",")
-s <- gsub(x=s, pattern = ",", replacement = ',')
-
-head((tweets %>% select(id, date, tweet, textf)), n = 10)
-```
-
-
 ```{r, cache=TRUE, warning=FALSE, message=FALSE }
 
-tp1 <- tweets[tweets$date == "2019-12",]
-tp2 <- tweets[tweets$date == "2020-01",]
-tp3 <- tweets[tweets$date == "2020-02",]
-tp4 <- tweets[tweets$date == "2020-03",]
-tp5 <- tweets[tweets$date == "2020-04",]
-tp6 <- tweets[tweets$date == "2020-05",]
+tp1 <- tweets[tweets$date == "2019-12",][1:1000,]
+tp2 <- tweets[tweets$date == "2020-01",][1:1000,]
+tp3 <- tweets[tweets$date == "2020-02",][1:1000,]
+tp4 <- tweets[tweets$date == "2020-03",][1:1000,]
+tp5 <- tweets[tweets$date == "2020-04",][1:1000,]
+tp6 <- tweets[tweets$date == "2020-05",][1:1000,]
 
 ncloud = 200
 words<- c("sus", "pra", "pro", "né", "tá", "vcs", "tô", "aí")
+
 tp1.fre <- get_freq(tp1$textf,  rwords=words, cloud_max_words = ncloud)
-tp1.s <- get_sentiment(tp1$textf, "Sentimentos Dez 2019")
+tp1.s <- get_sentiment(tp1$tweet, "Sentimentos Dez 2019")
 
 tp2.fre <- get_freq(tp2$textf,  rwords=words, cloud_max_words = ncloud)
-tp2.s <- get_sentiment(tp2$textf, "Sentimentos Jan 2020")
+tp2.s <- get_sentiment(tp2$tweet, "Sentimentos Jan 2020")
 
 tp3.fre <- get_freq(tp3$textf,  rwords=words, cloud_max_words = ncloud)
-tp3.s <- get_sentiment(tp3$textf, "Sentimentos Fev 2020")
+tp3.s <- get_sentiment(tp3$tweet, "Sentimentos Fev 2020")
 
 tp4.fre <- get_freq(tp4$textf,  rwords=words, cloud_max_words = ncloud)
-tp4.s <- get_sentiment(tp4$textf, "Sentimentos Mar 2020")
+tp4.s <- get_sentiment(tp4$tweet, "Sentimentos Mar 2020")
 
 tp5.fre <- get_freq(tp5$textf,  rwords=words, cloud_max_words = ncloud)
-tp5.s <- get_sentiment(tp5$textf, "Sentimentos Abril 2020")
+tp5.s <- get_sentiment(tp5$tweet, "Sentimentos Abril 2020")
 
 tp6.fre <- get_freq(tp6$textf,  rwords=words, cloud_max_words = ncloud)
-tp6.s <- get_sentiment(tp6$textf, "Sentimentos Maio 2020")
+tp6.s <- get_sentiment(tp6$tweet, "Sentimentos Maio 2020")
 
 ```
 
 ```{r}
-#df <- matrix(c(colSums(tp1.s),colSums(tp2.s),colSums(tp3.s),colSums(tp4.s),colSums(tp5.s),colSums(tp6.s)), nrow = 6, ncol = 10, byrow = T)
-#barplot(df, col=rainbow(length(pos_neg[1,])), names.arg = sent_labels, beside = T, las=2)
-#legend("topleft", pch = 15, col = rainbow(length(pos_neg[1,])), months)
-
 
 df <- matrix(c(colSums(tp1.s>0),colSums(tp2.s>0),colSums(tp3.s>0),colSums(tp4.s>0),colSums(tp5.s>0),colSums(tp6.s>0)), nrow = 11, ncol = 6, byrow = F)
 
 barplot(df, col=rainbow(length(df[,1])), names.arg = months, beside = T)
 legend("topleft", pch = 15, col = rainbow(length(df[,1])), sent_labels, cex = 0.75)
-
 
 ```
 ### Comparativo
