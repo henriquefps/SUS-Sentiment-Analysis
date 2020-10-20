@@ -9,10 +9,17 @@ output: html_document
 img {
   padding: 0px;
 }
+
+h6 {
+  font-size: 120%;
+  font-weight: bold;
+}
 ```
 
 # Computação para Análise de Dados{.tabset}
-## Descrição
+
+## Introdução
+
 ### Introdução
   O Sistema Único de Saúde Brasileiro(SUS) se mostrou de grande importância no ano de 2020 com a disseminação do vírus COVID-19, causando a pandemia que matou mais de 100 mil brasileiros até o entre fevereiro e do mesmo ano.
 
@@ -23,7 +30,7 @@ img {
   A abordagem consistirá em separar os tweets coletados pelos meses de cada um, realizar análises de sentimentos por período, identificar palavras mais frequentes em cada período para positivos e negativos.  Para essas palavras, identificar quais os termos de temas mais relevantes, para identificar também qual o sentimento da população nesses temas relacionados diretamente ao SUS. No final, serão gerados gráficos que para facilitar a visualização destes dados.
   
   
-### Libraries
+## Pacotes Requeridos
 ```{r setup, warning=FALSE, message=FALSE } 
 library(tm)         # Será utilizado para análise de sentimentos.
 library(wordcloud)  # Será utilizado para gerar nuvens de palavras com as palavras mais frequentes no dataset.
@@ -33,48 +40,86 @@ library(stringi)    # Será utilizado para limpeza dos dados.
 library(readr)      # Será utilizado para limpeza e formatação dos dados.
 library(dplyr)      # Será utilizado para formatação de visualização dos dados
 library(reshape)    # Será utilizado para formatar os dados para a nuvem de palavras.
+library(DT)         # Será utilizado para visualização em tabelas
 ```
 
-### Preparação dos Dados
+## Preparação dos Dados
 
-A base de dados foi criada por mim coletando dados do twitter com uma API chamada Twint e está disponível neste link do [GitHub](https://github.com/henriquefps/SUS-Sentiment-Analysis/blob/master/Projeto/new_tweetsdb.csv) em formato CSV.
+### Coleta dos dados
 
-Os dados foram coletados no início do mês de setembro, chamou a atenção que quase nenhum dos 12 mil tweets coletados têm com informação de localização, o que torna impraticável a análise de sentimento por regiões. Os dados possuem 26 variáveis e consistem de 2 mil tweets do final de cada mês, de dezembro de 2019 a maio de 2020, totalizando os 12 mil tweets.
+Os dados foram coletados em outubro de 2020, com a utilização da API [Twint](https://github.com/twintproject/twint) através dos comandos cmd  que está disponpivel neste [arquivo python notebook no GitHub](https://github.com/henriquefps/SUS-Sentiment-Analysis/blob/master/SUS_Saude/Tweets_BD.ipynb) do projeto. Sobre esta API, é importante ressaltar que ela está sempre sendo atualizada, e dependendo do momento em que o teste seja realizado, ela pode estar indisponível. Com a API, os tweets foram buscados entre dezembro de 2019 e setembro de 2020, e com limite de 10 mil tweets por mês. Após coletados, os tweets salvos como CSV no ambiente. Caso seja executado em um ambiente python notebook online, o código, após a coleta, salva os arquivos na raiz do Google Drive pela api "gdrive".
 
-Para a limpeza dos dados, além da remoção de stopwords, por se tratar de tweets outras ações são necessárias. É importante remover as marcações de outras pessoas, os "@username", remover emojis, que no CSV estão no formato <U+0001F1E8> e remover links. Neste projeto estaremos considerando todas essas informações como ruído, porém acredito ser possível considerar emojis nas emoções em uma implementação própria do algoritmo de classificação de sentimentos.
+Para a coleta, escolheu-se pesquisar por tweets com o termo "Saúde SUS". Um problema encontrado quando pesquisando apenas pelo termo "SUS" foi a quantidade de tweets em espanhol não relacionadas ao tema do sistema de saúde brasileiro. Isso ocorreu mesmo filtrando apenas por tweets em português "pt-BR", provavelmente por alguma dificuldade do próprio Twiites em classificar estes tweets retornados como espanhol. A escolha do termo "Saúde SUS" restringe um pouco nossa pesquisa, porém garante que irá retornar tweets onde as duas palavras aparecem, e que o que será retornado tem relação com o tema do trabalho, sem acrescentar viés na busca.
 
-## Análise Exploratória {.tabset}
+Após coletados, chamou atenção que pouquíssimos tweets tinham localização disponível. Na base de dados que foi montada para este projeto, dos mais de 70 mil tweets coletados, nenhum possui dados de localização, tornando inviável análises considerando este tipo de dados.
+
+Nesta execução serão utilizados 2500 tweets por mês, totalizando 25 mil tweets dos meses de dezembro 2019 a setembro 2020.
+
+#### Exemplo de chamada Twint
+
+"Tweets das 00h de 31-12-2019 até as 00h de 01-01-2020, em português brasileiro, sem retweets(-fr), limitados a 10 mil tweets e salve em formato csv"
+
+```{bash, eval=FALSE}
+twint -s "Saúde SUS" --since 2019-12-01 --until 2020-01-01 --limit 10000 --lang "pt-BR" -fr -pc 1 -o dec2019 --csv
+```
+
+### Carregando e visualizando de dados coletados
+
 ```{r, include=FALSE}
-setwd("~/GitHub/SUS-Sentiment-Analysis/Projeto")
+setwd("~/GitHub/SUS-Sentiment-Analysis")
 ```
 
+```{r, cache=TRUE}
+tweets <- read.csv("https://raw.githubusercontent.com/henriquefps/SUS-Sentiment-Analysis/master/new_tweetsdb.csv", encoding= "UTF-8")
+
+# tweets <- read.csv("new_tweetsdb.csv", encoding = "UTF-8")
+
+# Formatar data dos tweets de yyyy-MM-dd para yyyy-MM, ignorando o dia
+tweets$datef <- str_extract(tweets$date, "[0-9]{4}-[0-9]{2}")
+
+# Tweets coletados por mês com o termo "Saúde SUS"
+datatable(tweets %>% group_by(datef) %>% count(name = "Tweets"))
+
+# Variáveis disponíveis na chamada
+colnames(tweets)
+
+# Exemplo de registro
+head(tweets, n=1)
+
+# Tweets coletados com localização
+length(which(!is.na(tweets$geo)))
+```
 
 ### Constantes
 
-#### Constantes
+Declaração de algumas constantes necessárias no código.
 
 ```{r}
+# Meses no período de pesquisa
+months <- c("Dez 19", "Jan 20", "Fev 20", "Mar 20", "Abr 20", "Mai 20", "Jun 20", "Jul 20", "Ago 20", "Set 20")
+
+# Abreviações de StopWords informais não contempladas em stopwords("portuguese")
+extra_stpwords <- c("pra", "pro", "né", "tá", "vcs", "tô", "aí")
+
+# Tradução das colunas de sentimentos do NRC Sentiment
 sent_labels <- c("Raiva", "Antecipação", "Nojo", "Medo", "Alegria", 
 "Tristeza", "Surpesa", "Confiança", "Negativo", "Positivo", "Neutro")
 
-months <- c("Dez 19", 
-            "Jan 20", 
-            "Fev 20", 
-            "Mar 20", 
-            "Abr 20", 
-            "Mai 20", 
-            "Jun 20", 
-            "Jul 20", 
-            "Ago 20", 
-            "Set 20")
-
-extra_stpwords <- c("pra", "pro", "né", "tá", "vcs", "tô", "aí")
-
+#Colunas de sentimentos com relevância selecionadas para o projeto
 col_sents <- c(1, 3, 4, 5, 6, 8)
 
-```
+# Número de tweets a considerar por mês
+ntweets <- 2500
 
-#### Functions
+# Limite das nuvens de palavras
+ncloud <- 500
+
+``` 
+
+### Funções
+
+A ação get_nrc_sentiment da biblioteca syhuzet retorna sentimentos analizado por frases contidas no texto. Sendo assim, um tweet com 5 frases terá 5 análises de sentimento positivo ou negativo. Considerando essa funcionalidade da biblioteca, na ação get_sentiment, foi implementada uma comparação para definir se a classe do tweet é positiva(mais frases positivas que negativas), negativa(mais classes negativas que positivas) ou neutro(mesma quantidade de frases negativas e positivas).
+
 ```{r}
 textclean1 <- function(text_list){
   aux <- text_list
@@ -82,27 +127,24 @@ textclean1 <- function(text_list){
   aux <-  readr::parse_character(aux, locale = readr::locale('pt'))
   aux <- sapply(aux, function(x) stri_trans_tolower(x,'pt')) # Por tudo em letras minúsculas
   aux <- gsub("<[Uu]\\+[a-zA-Z0-9]*>", "",  aux); # Remover Emojis
-  aux <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "",  aux)
-  aux <- str_replace(aux,"RT @[a-z,A-Z]*: ","")
-  aux <- gsub("@\\w+", "", aux)
-  aux <- removeURL(aux)
-  aux <- gsub(x = aux, pattern = "\n", replacement = " ")
-  aux <- gsub(x = aux, pattern = '\\"', replacement = ' ')
-  aux <- gsub("[^%[:alnum:][:blank:]!?]", "", aux)
-  aux <- gsub(x =  aux, pattern = "saude", "saúde")
-  aux <- gsub(x =  aux, pattern = "saãde", "saúde")
-
+  aux <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "",  aux) # Remover informações de retweet
+  aux <- str_replace(aux,"RT @[a-z,A-Z]*: ","") # Remover informações de retweet
+  aux <- gsub("@\\w+", "", aux) # Remover marcações @username
+  aux <- removeURL(aux) # Remover links
+  aux <- gsub(x = aux, pattern = "\n", replacement = " ") # Susbstitur \n por espaços
+  aux <- gsub(x = aux, pattern = '\\"', replacement = ' ') # Substituir " por vazio
+  aux <- gsub("[^%[:alnum:][:blank:]!?]", "", aux)  # Remover caracteres que não são % ou alphanuméricos
+  aux <- gsub(x =  aux, pattern = "saude", "saúde") # Substituir saude por saúde
+  aux <- gsub(x =  aux, pattern = "saãde", "saúde") # Substituir saãde, um problema de encoding encontrado, por saúde
   return(aux)
 }
 
-
 get_sentiment <- function(text_listf, title="Sentimentos"){
-  s <- get_nrc_sentiment(text_listf, language = "portuguese")
+  s <- get_nrc_sentiment(text_listf, language = "portuguese") #Sentimentos em PT
   s$neutral <- (s$positive == s$negative) > 0
   s$positive <- (s$positive > s$negative) > 0
   s$negative <- (s$positive == 0 & s$neutral == 0) > 0
   colnames(s) <- sent_labels 
-  #barplot(colSums(s)[1:8],las=2,col=rainbow(10), ylab= "Quantidade", main=title)
   return(s)
 }
 
@@ -135,7 +177,7 @@ get_freq <- function(tp, cloud_max_words){
   colnames(tdm_clean) <- classes
   
   #Gerando nuvem de palavras
-  comparison.cloud(tdm_clean,max.words=300,random.order=FALSE,scale=c(2,.3), title.size=1.4, colors = c("#119911", "red"))
+  comparison.cloud(tdm_clean,max.words=cloud_max_words,random.order=FALSE,scale=c(2,.3), title.size=1.4, colors = c("#119911", "red"))
 }
 
 get_labels <- function(sentiment){
@@ -146,51 +188,48 @@ get_labels <- function(sentiment){
   return(aux$label)
 } 
 
-
 ```
 
-### Carregar e limpar dados
+### Limpar dados
 
-```{r, cache=TRUE}
-#tweets <- read.csv("https://raw.githubusercontent.com/henriquefps/SUS-Sentiment-Analysis/master/Projeto/new_tweetsdb.csv", encoding = "UTF-8")
+Para a limpeza dos dados, como nosso objetivo é realizar analise de sentimentos, é importante remover as marcações de outras pessoas, os "@username". Também precisamos remover emojis, que no CSV estão no formato <U+0001F1E8> e remover links. Neste projeto estaremos considerando todas essas informações como ruído, porém acredito ser possível considerar emojis nas emoções em uma implementação própria do algoritmo de classificação de sentimentos.
 
-tweets <- read.csv("new_tweetsdb.csv", encoding = "UTF-8")
+Também foi realizada uma formaração na data-hora do tweet, para considerar apenas o mês e ano em que o tweet foi feito, desconsiderando o dia e hora de publicação.
 
-tweets$date <- str_extract(tweets$date, "[0-9]{4}-[0-9]{2}")
+Neste projeto estamos utilizando apenas as informações de data e texto dos tweets.
 
+```{r}
+# Selecionar colunas para análise
+tweets <- tweets %>% select(datef, tweet)
+
+# Nova coluna com tweets formatados
 tweets$textf <- textclean1(tweets$tweet)
 
 ```
 
-#### Exemplo de textos formatados
+### Exemplo de textos formatados
 
 ```{r}
-# Tweets coletados por mês com o termo "Saúde SUS"
-tweets %>% group_by(date) %>% count(name = "Tweets")
-
 # Exemplo de dados formatados
-as.data.frame(head(tweets %>% select(tweet, textf), n = 1))
+datatable(head(tweets %>% select(tweet, textf), n = 1))
 ```
 
-### Análise Mensal
+### Análise de Sentimentos
 
-```{r, cache=TRUE, warning=FALSE, message=FALSE, class.output=""}
+```{r analise-sentimentos, message=FALSE, warning=FALSE, cache=TRUE, class.output=""}
+# Separar dataset por meses 
+tp1 <- tweets[tweets$datef == "2019-12",][1:ntweets,]
+tp2 <- tweets[tweets$datef == "2020-01",][1:ntweets,]
+tp3 <- tweets[tweets$datef == "2020-02",][1:ntweets,]
+tp4 <- tweets[tweets$datef == "2020-03",][1:ntweets,]
+tp5 <- tweets[tweets$datef == "2020-04",][1:ntweets,]
+tp6 <- tweets[tweets$datef == "2020-05",][1:ntweets,]
+tp7 <- tweets[tweets$datef == "2020-06",][1:ntweets,]
+tp8 <- tweets[tweets$datef == "2020-07",][1:ntweets,]
+tp9 <- tweets[tweets$datef == "2020-08",][1:ntweets,]
+tp10 <- tweets[tweets$datef == "2020-09",][1:ntweets,]
 
-ntweets <- 1000
-ncloud <- 300
-
-tp1 <- tweets[tweets$date == "2019-12",][1:ntweets,]
-tp2 <- tweets[tweets$date == "2020-01",][1:ntweets,]
-tp3 <- tweets[tweets$date == "2020-02",][1:ntweets,]
-tp4 <- tweets[tweets$date == "2020-03",][1:ntweets,]
-tp5 <- tweets[tweets$date == "2020-04",][1:ntweets,]
-tp6 <- tweets[tweets$date == "2020-05",][1:ntweets,]
-tp7 <- tweets[tweets$date == "2020-06",][1:ntweets,]
-tp8 <- tweets[tweets$date == "2020-07",][1:ntweets,]
-tp9 <- tweets[tweets$date == "2020-08",][1:ntweets,]
-tp10 <- tweets[tweets$date == "2020-09",][1:ntweets,]
-
-
+#Análise de sentimentos de cada mês
 tp1.s <- get_sentiment(tp1$textf)
 tp1$label <- get_labels(tp1.s)
 
@@ -223,74 +262,15 @@ tp10$label <- get_labels(tp10.s)
 
 ```
 
-#### Dezembro 2019
+## Análise Exploratória
 
-```{r, warning=FALSE, message=FALSE}
-get_freq(tp1, ncloud)
-```
+### Análises {.tabset}
 
-#### Janeiro 2020
-
-```{r, warning=FALSE, message=FALSE}
-get_freq(tp2, cloud_max_words = ncloud)
-```
-
-#### Fevereiro 2020
-
-```{r, warning=FALSE, message=FALSE}
-get_freq(tp3, cloud_max_words = ncloud)
-```
-
-#### Março 2020
-
-```{r, warning=FALSE, message=FALSE}
-get_freq(tp4, cloud_max_words = ncloud)
-```
-
-#### Abril 2020
-
-```{r, warning=FALSE, message=FALSE}
-get_freq(tp5, cloud_max_words = ncloud)
-```
-
-#### Maio 2020
-
-```{r, warning=FALSE, message=FALSE}
-get_freq(tp6, cloud_max_words = ncloud)
-```
-
-#### Junho 2020
-
-```{r, warning=FALSE, message=FALSE}
-get_freq(tp7, cloud_max_words = ncloud)
-```
-
-#### Julho 2020
-
-```{r, warning=FALSE, message=FALSE}
-get_freq(tp8, cloud_max_words = ncloud)
-```
-
-#### Agosto 2020
-
-```{r, warning=FALSE, message=FALSE}
-get_freq(tp9, cloud_max_words = ncloud)
-```
-
-#### Setembro 2020
-
-```{r, warning=FALSE, message=FALSE}
-get_freq(tp10, cloud_max_words = ncloud)
-```
-
-### Evolução
+#### Mês a Mês
 
 ```{r}
-
+# Agrupar dados para gráficos
 df <- matrix(c(colSums(tp1.s>0),colSums(tp2.s>0),colSums(tp3.s>0),colSums(tp4.s>0),colSums(tp5.s>0),colSums(tp6.s>0),colSums(tp7.s>0),colSums(tp8.s>0),colSums(tp9.s>0),colSums(tp10.s>0)), nrow = 11, ncol = 10, byrow = F)
-
-#barplot(df[], col=rainbow(length(df[,1])), names.arg = months, beside = T)
-#legend("topleft", pch = 15, col = rainbow(length(df[,1])), sent_labels, cex = 0.75)
 
 ```
 
@@ -311,27 +291,117 @@ barplot(pos_neg, col=rainbow(length(pos_neg[,1])), names.arg = months, beside = 
 legend("topright", pch = 15, col = rainbow(length(pos_neg[,1])), sent_labels[col_posneg], cex = 0.75)
 ```
 
-```{r}
-col_sents <- c(1, 3, 4, 5, 6, 8)
+```{r} 
 sent <- df[c(col_sents),]
 
 barplot(sent, col=rainbow(length(sent[,1])), names.arg = months, beside = T, xlab = "Mês", ylab="Frequencia em Tweets", main= "Sentimentos encontrados por quantidade no período de pesquisa", cex.names = 0.75)
 legend("topleft", pch = 15, col = rainbow(length(sent[,1])), sent_labels[col_sents], cex = 0.75)
 ```
 
-### Pontos de interesse
+##### Nuvens de Palavras {.tabset}
 
-#### Governo Federal
+###### Dezembro 2019
+
+```{r, warning=FALSE, message=FALSE}
+get_freq(tp1, ncloud)
+```
+
+###### Janeiro 2020
+
+```{r, warning=FALSE, message=FALSE}
+get_freq(tp2, cloud_max_words = ncloud)
+```
+
+###### Fevereiro 2020
+
+```{r, warning=FALSE, message=FALSE}
+get_freq(tp3, cloud_max_words = ncloud)
+```
+
+###### Março 2020
+
+```{r, warning=FALSE, message=FALSE}
+get_freq(tp4, cloud_max_words = ncloud)
+```
+
+###### Abril 2020
+
+```{r, warning=FALSE, message=FALSE}
+get_freq(tp5, cloud_max_words = ncloud)
+```
+
+###### Maio 2020
+
+```{r, warning=FALSE, message=FALSE}
+get_freq(tp6, cloud_max_words = ncloud)
+```
+
+###### Junho 2020
+
+```{r, warning=FALSE, message=FALSE}
+get_freq(tp7, cloud_max_words = ncloud)
+```
+
+###### Julho 2020
+
+```{r, warning=FALSE, message=FALSE}
+get_freq(tp8, cloud_max_words = ncloud)
+```
+
+###### Agosto 2020
+
+```{r, warning=FALSE, message=FALSE}
+get_freq(tp9, cloud_max_words = ncloud)
+```
+
+###### Setembro 2020
+
+```{r, warning=FALSE, message=FALSE}
+get_freq(tp10, cloud_max_words = ncloud)
+```
+
+##### Análise dos dados
+
+Acompanhando a evolução do gráfico de sentimentos positivos e negativos, é possível perceber que nos meses que se antecederam a pandemia, ou seja, até fevereiro de 2020, O percentual de tweets positivos com relação ao tema do SUS manteve-se constantemente acima dos tweets negativos. 
+
+Após a análise das nuvens de palavras desses três meses, é possível indicar os seguintes destaques:
+
+```{r, echo=FALSE}
+datatable(data.frame(periodo=c("Dez 19","Jan 20"), termos=c("'quer incluir', 'milhões brasileiros'","'defende sus', 'compra pets'"), 
+                   
+contexto=c("Programa Previne Brasil quer incluir 50 milhões de brasileiros no SUS",
+           "Foi encontrada uma corrente de rede social sobre vários temas, incluindo defesa do sus, onde a maioria se mostra a favor"
+           )))
+```
+
+No mês de março, primeiro mês da pandemia, foi a primeira vez no período de análise em que a quantidade de tweets negativos foi proporcionalmente maior que o de tweets positivos. Começando nesse mês, e durante os próximos 4 meses de análise, foram registrado os picos dos sentimentos "Medo" nos tweets analisados. Observando também as nuvens de palavras de março 2020 e abril de 2020, podemos encontrar alguns dos motivos para esse pico no medo dos usuários sobre o tema do SUS. 
+
+Em março falou-se muito do custo financeiro da pandemia no orçamento do SUS, além do possível colapso do sistema de saúde com a sobrecarga de leitos. Já em abril comentou-se menos do impacto financeiro, porém a questão da desigualdade social ao acesso a saúde também aparece acrescentada aou outros como fator que infuenciam os sentimentos de "Medo" e "Tristeza".
+
+No mês de maio o sentimento a proporção de sentimentos voltou a tender ligeiramente para o positivo, com o incentivo de termos como o defenda o sus, movimento que apareceu em destaque pela primeira vez em abril, e se manteve em destaque com defesa sus e defender sus pelo restante do período de análise.
+
+
+
+
+
+
+
+
+
+
+#### Pontos de interesse
+
+##### Governo Federal
 
 Percebeu-se que o Governo federal foi um dos tópicos que mais apareceu em tweets negativos
 
 ```{r, warning=FALSE, message=FALSE}
-gov_fed <- subset(x = rbind(tp1,tp2,tp3,tp4,tp5,tp6,tp7,tp8,tp9,tp10))
+gov_fed <- rbind(tp1,tp2,tp3,tp4,tp5,tp6,tp7,tp8,tp9,tp10)
 gov_fed <- gov_fed[grep(gov_fed$textf, pattern = "(governo)|(federal)"),]
 ```
 Quantidade de tweets com governo federal
 ```{r, warning=FALSE, message=FALSE,}
-length(gov_fed$id)
+length(gov_fed$textf)
 get_freq(gov_fed, cloud_max_words = ncloud)
 ```
 
